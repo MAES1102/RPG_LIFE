@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import '../models/rpg_models.dart';
 import '../services/api_service.dart';
 import '../services/health_sync_service.dart';
+import '../widgets/cyber_camera_hud_sheet.dart';
 import '../widgets/raid_focus_timer_sheet.dart';
 import '../widgets/rive_hero_stage.dart';
+import '../widgets/share_card_sheet.dart';
+import 'neuro_arena_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -32,6 +35,24 @@ class _HomeScreenState extends State<HomeScreen> {
   late List<SphereModel> _spheres;
   late List<QuestModel> _quests;
   late List<ShopItemModel> _shopCatalog;
+  late List<ArenaBossModel> _arenaBosses;
+
+  CombatStatsModel get _currentCombatStats {
+    int lvlOf(String code) {
+      for (final s in _spheres) {
+        if (s.code == code) return s.level;
+      }
+      return 1;
+    }
+
+    return ProgressionMath.computeCombatStats(
+      bodyLevel: lvlOf('body'),
+      brainLevel: lvlOf('brain'),
+      energyLevel: lvlOf('energy'),
+      soulLevel: lvlOf('soul'),
+      equipped: _equipped,
+    );
+  }
 
   @override
   void initState() {
@@ -140,12 +161,20 @@ class _HomeScreenState extends State<HomeScreen> {
         icon: '🛡️',
       ),
     ];
+
+    _arenaBosses = ArenaBossModel.defaultTowerBosses();
   }
 
   Future<void> _syncFromBackend() async {
     final data = await _api.fetchProfile();
     if (data != null && mounted) {
       _applyProfileJson(data);
+    }
+    final bosses = await _api.fetchArenaBosses();
+    if (bosses != null && bosses.isNotEmpty && mounted) {
+      setState(() {
+        _arenaBosses = bosses;
+      });
     }
   }
 
@@ -288,7 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _showRewardBanner(quest.title, xpEarned, goldEarned);
   }
 
-  void _showRewardBanner(String title, int xp, int gold) {
+  void _showRewardBanner(String title, int xp, int gold, {String? metricLabel}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -297,6 +326,121 @@ class _HomeScreenState extends State<HomeScreen> {
         content: Text(
           '⚡ Квест выполнен! +$xp XP  |  +$gold 🪙 золота ($title)',
           style: const TextStyle(color: Color(0xFF00F5D4), fontWeight: FontWeight.w600),
+        ),
+        action: SnackBarAction(
+          label: '📲 9:16 Stories',
+          textColor: const Color(0xFFFEE440),
+          onPressed: () {
+            _openShareCardSheet(
+              mode: ShareCardMode.stravaQuest,
+              questTitle: title,
+              metricLabel: metricLabel ?? 'ВЫПОЛНЕНО В РЕАЛЬНОСТИ',
+              xpEarned: xp,
+              goldEarned: gold,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openShareCardSheet({
+    ShareCardMode mode = ShareCardMode.stravaQuest,
+    String? questTitle,
+    String? metricLabel,
+    int? xpEarned,
+    int? goldEarned,
+    ArenaBossModel? defeatedBoss,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ShareCardSheet(
+        initialMode: mode,
+        heroLevel: _heroLevel,
+        streakDays: _streakDays,
+        equipped: _equipped,
+        combatStats: _currentCombatStats,
+        spheres: _spheres,
+        questTitle: questTitle,
+        metricLabel: metricLabel,
+        xpEarned: xpEarned,
+        goldEarned: goldEarned,
+        defeatedBoss: defeatedBoss,
+      ),
+    );
+  }
+
+  void _openCyberCameraHud() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CyberCameraHudSheet(
+        streakDays: _streakDays,
+        onWorkoutCompleted: (exerciseTitle, reps, xpEarned, goldEarned) {
+          setState(() {
+            _gold += goldEarned;
+            _heroXp += xpEarned;
+            while (_heroXp >= _heroXpNext) {
+              _heroXp -= _heroXpNext;
+              _heroLevel += 1;
+              _heroXpNext = ProgressionMath.xpNextForLevel(_heroLevel);
+            }
+            for (final sp in _spheres) {
+              if (sp.code == 'body') {
+                sp.currentXp += xpEarned;
+                while (sp.currentXp >= sp.xpNext) {
+                  sp.currentXp -= sp.xpNext;
+                  sp.level += 1;
+                  sp.xpNext = ProgressionMath.xpNextForLevel(sp.level);
+                }
+              }
+            }
+          });
+          _openShareCardSheet(
+            mode: ShareCardMode.stravaQuest,
+            questTitle: exerciseTitle,
+            metricLabel: '$reps ПОВТОРЕНИЙ • AI-HUD SNAP',
+            xpEarned: xpEarned,
+            goldEarned: goldEarned,
+          );
+        },
+      ),
+    );
+  }
+
+  void _openNeuroArena() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => NeuroArenaScreen(
+          heroLevel: _heroLevel,
+          streakDays: _streakDays,
+          equipped: _equipped,
+          combatStats: _currentCombatStats,
+          spheres: _spheres,
+          bosses: _arenaBosses,
+          onVictoryClaimed: (boss, remainingHpPct) async {
+            final resp = await _api.claimArenaVictory(
+              bossCode: boss.code,
+              remainingHpPercent: remainingHpPct,
+            );
+            if (resp != null && resp['profile'] is Map<String, dynamic>) {
+              _applyProfileJson(resp['profile'] as Map<String, dynamic>);
+            } else {
+              setState(() {
+                boss.isDefeated = true;
+                _gold += boss.rewardGold;
+                _heroXp += boss.rewardXp;
+                while (_heroXp >= _heroXpNext) {
+                  _heroXp -= _heroXpNext;
+                  _heroLevel += 1;
+                  _heroXpNext = ProgressionMath.xpNextForLevel(_heroLevel);
+                }
+              });
+            }
+          },
         ),
       ),
     );
@@ -537,6 +681,109 @@ class _HomeScreenState extends State<HomeScreen> {
               equipped: _equipped,
               streakFreezeActive: _streakFreezeActive,
               onOpenShop: _openShopSheet,
+            ),
+            const SizedBox(height: 12),
+
+            // Панель «Боевые статы аватара от реальной жизни» + Вход в Нейро-Арену, Камеру HUD и Шеринг 9:16
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF14172B),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF00F5D4).withOpacity(0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '⚔️ БОЕВЫЕ СТАТЫ АВАТАРА (ОТ СФЕР ЖИЗНИ)',
+                        style: TextStyle(
+                          color: Color(0xFF00F5D4),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        '⚡ Мощь: ${_currentCombatStats.combatPowerScore} PTS',
+                        style: const TextStyle(
+                          color: Color(0xFFFEE440),
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        '💪 HP: ${_currentCombatStats.maxHp} | ATK: ${_currentCombatStats.attackPower}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      Text(
+                        '🧠 Sandevistan: -${_currentCombatStats.chronoSlowPercent}% (${_currentCombatStats.parryWindowMs}мс)',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      Text(
+                        '⚡ Рывок: ${_currentCombatStats.dashCooldownSec}с',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                      Text(
+                        '🎨 Крит x2.5: ${(_currentCombatStats.critChance * 100).toStringAsFixed(0)}% | Щит: +${_currentCombatStats.petAssistShield}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF2A85),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: _openNeuroArena,
+                        icon: const Icon(Icons.sports_esports, size: 18),
+                        label: const Text(
+                          'Башня Боссов (60 FPS)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF00F5D4),
+                          side: const BorderSide(color: Color(0xFF00F5D4)),
+                        ),
+                        onPressed: _openCyberCameraHud,
+                        icon: const Icon(Icons.camera_enhance, size: 16),
+                        label: const Text(
+                          'Кибер-Камера HUD',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFEE440),
+                          side: const BorderSide(color: Color(0xFFFEE440)),
+                        ),
+                        onPressed: () => _openShareCardSheet(mode: ShareCardMode.heroBossVictory),
+                        icon: const Icon(Icons.ios_share, size: 16),
+                        label: const Text(
+                          '9:16 Stories',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 

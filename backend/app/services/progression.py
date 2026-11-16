@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, Literal, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 DifficultyType = Literal["easy", "normal", "hardcore"]
 
@@ -105,3 +105,91 @@ def apply_xp_and_level_up(current_level: int, current_xp: int, added_xp: int) ->
             break
 
     return level, xp, leveled_up
+
+
+@dataclass(frozen=True)
+class CombatStatsResult:
+    """
+    Боевые характеристики аватара для «Нейро-Арены / Башни Боссов»,
+    рассчитываемые напрямую из уровней 4 сфер реальной жизни и экипировки.
+    """
+
+    max_hp: int
+    attack_power: int
+    chrono_slow_percent: int
+    parry_window_ms: int
+    dash_cooldown_sec: float
+    stamina_regen: float
+    crit_chance: float
+    crit_multiplier: float
+    pet_assist_shield: int
+    combat_power_score: int
+
+
+def compute_combat_stats(
+    body_level: int = 1,
+    brain_level: int = 1,
+    energy_level: int = 1,
+    soul_level: int = 1,
+    equipped_skin: str = "skin_default_runner",
+    equipped_pet: Optional[str] = None,
+) -> CombatStatsResult:
+    """
+    Связка «Прогресс в реальной жизни -> Боевые статы аватара»:
+    - 💪 Тело (body_level): max_hp (база 100 + 35 за уровень), attack_power (база 10 + 5 за уровень).
+    - 🧠 Мозг (brain_level): chrono_slow_percent (от 10% до 50%), parry_window_ms (окно тайминга).
+    - ⚡ Энергия (energy_level): dash_cooldown_sec (уменьшение КД рывка), stamina_regen.
+    - 🎨 Душа (soul_level): crit_chance (шанс крита x2.5) и pet_assist_shield (щит от питомца).
+    """
+    b_lvl = max(1, body_level)
+    br_lvl = max(1, brain_level)
+    e_lvl = max(1, energy_level)
+    s_lvl = max(1, soul_level)
+
+    # Бонусы от внутриигровой экипировки
+    skin_hp_bonus = 25 if equipped_skin == "skin_neon_samurai" else 0
+    skin_atk_bonus = 4 if equipped_skin == "skin_neon_samurai" else 0
+    skin_chrono_bonus = 5 if equipped_skin == "skin_netrunner_hoodie" else 0
+    pet_bonus_shield = 40 if equipped_pet else 0
+
+    # 💪 Тело -> Выживаемость и Урон
+    max_hp = 100 + 35 * b_lvl + skin_hp_bonus
+    attack_power = 10 + 5 * b_lvl + skin_atk_bonus
+
+    # 🧠 Мозг -> Нейро-Замедление (Sandevistan 10%..50%) и Окно Парирования (мс)
+    raw_chrono = 10 + 5 * (br_lvl - 1) + skin_chrono_bonus
+    chrono_slow_percent = int(min(50, max(10, raw_chrono)))
+    parry_window_ms = int(min(260, 95 + 18 * br_lvl))
+
+    # ⚡ Энергия -> КД рывка/уворота и регенерация стамины
+    dash_cooldown_sec = round(max(1.1, 4.2 - 0.35 * e_lvl), 2)
+    stamina_regen = round(15.0 + 4.5 * e_lvl, 1)
+
+    # 🎨 Душа -> Шанс крита (x2.5) и Щит компаньона
+    crit_chance = round(min(0.50, 0.05 + 0.035 * s_lvl), 3)
+    crit_multiplier = 2.5
+    pet_assist_shield = 15 * s_lvl + pet_bonus_shield
+
+    # Интегральный индекс Боевой Мощи героя
+    combat_power_score = int(
+        round(
+            (max_hp + pet_assist_shield) * 0.8
+            + attack_power * 6.5
+            + chrono_slow_percent * 3.0
+            + (1000.0 / max(1.0, dash_cooldown_sec)) * 0.15
+            + crit_chance * 250.0
+        )
+    )
+
+    return CombatStatsResult(
+        max_hp=max_hp,
+        attack_power=attack_power,
+        chrono_slow_percent=chrono_slow_percent,
+        parry_window_ms=parry_window_ms,
+        dash_cooldown_sec=dash_cooldown_sec,
+        stamina_regen=stamina_regen,
+        crit_chance=crit_chance,
+        crit_multiplier=crit_multiplier,
+        pet_assist_shield=pet_assist_shield,
+        combat_power_score=combat_power_score,
+    )

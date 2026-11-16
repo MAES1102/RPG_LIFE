@@ -94,4 +94,42 @@ class ApiService {
     } catch (_) {}
     return null;
   }
+
+  Future<List<ArenaBossModel>?> fetchArenaBosses() async {
+    try {
+      final resp = await http
+          .get(Uri.parse('$baseUrl/api/v1/arena/bosses?user_id=$userId'))
+          .timeout(const Duration(seconds: 3));
+      if (resp.statusCode == 200) {
+        final rawList = jsonDecode(utf8.decode(resp.bodyBytes)) as List;
+        return rawList
+            .map((e) => ArenaBossModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> claimArenaVictory({
+    required String bossCode,
+    required double remainingHpPercent,
+  }) async {
+    try {
+      final resp = await http
+          .post(
+            Uri.parse('$baseUrl/api/v1/arena/claim-victory'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'user_id': userId,
+              'boss_code': bossCode,
+              'remaining_hp_percent': remainingHpPercent,
+            }),
+          )
+          .timeout(const Duration(seconds: 4));
+      if (resp.statusCode == 200) {
+        return jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+    return null;
+  }
 }

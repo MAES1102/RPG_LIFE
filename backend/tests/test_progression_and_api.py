@@ -5,6 +5,7 @@ import unittest
 from app.services.progression import (
     apply_xp_and_level_up,
     compute_action_reward,
+    compute_combat_stats,
     compute_overachieve_multiplier,
     compute_streak_multiplier,
     compute_xp_next,
@@ -51,6 +52,41 @@ class ProgressionMathTestCase(unittest.TestCase):
         self.assertTrue(leveled)
         self.assertEqual(new_lvl, 2)
         self.assertEqual(rem_xp, 50)
+
+    def test_combat_stats_from_four_spheres_and_equipment(self) -> None:
+        """
+        Проверяет связку «Прогресс в реальной жизни -> Боевые статы аватара»:
+        - Тело (body=1 -> HP=135, ATK=15; body=4 -> HP=240, ATK=30)
+        - Мозг (brain=1 -> chrono=10%, parry=113ms; brain=5 -> chrono=30%, parry=185ms)
+        - Энергия (energy=1 -> dash=3.85s; energy=5 -> dash=2.45s)
+        - Душа (soul=1 -> crit=0.085, shield=15; с питомцем +40 щита)
+        """
+        base_stats = compute_combat_stats(
+            body_level=1,
+            brain_level=1,
+            energy_level=1,
+            soul_level=1,
+        )
+        self.assertEqual(base_stats.max_hp, 135)
+        self.assertEqual(base_stats.attack_power, 15)
+        self.assertEqual(base_stats.chrono_slow_percent, 10)
+        self.assertEqual(base_stats.parry_window_ms, 113)
+        self.assertAlmostEqual(base_stats.dash_cooldown_sec, 3.85)
+        self.assertEqual(base_stats.pet_assist_shield, 15)
+
+        upgraded_stats = compute_combat_stats(
+            body_level=4,
+            brain_level=5,
+            energy_level=5,
+            soul_level=4,
+            equipped_skin="skin_neon_samurai",
+            equipped_pet="pet_cyber_fox",
+        )
+        self.assertEqual(upgraded_stats.max_hp, 100 + 35 * 4 + 25)
+        self.assertEqual(upgraded_stats.attack_power, 10 + 5 * 4 + 4)
+        self.assertEqual(upgraded_stats.chrono_slow_percent, 30)
+        self.assertEqual(upgraded_stats.pet_assist_shield, 15 * 4 + 40)
+        self.assertGreater(upgraded_stats.combat_power_score, base_stats.combat_power_score)
 
 
 if __name__ == "__main__":

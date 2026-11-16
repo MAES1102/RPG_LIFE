@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.models.schemas import (
+    ArenaBossSchema,
+    ArenaClaimVictoryRequest,
+    ArenaClaimVictoryResponse,
     PresetOnboardingRequest,
     QuestAIParseRequest,
     QuestAIStructuredOutput,
@@ -167,3 +170,28 @@ def equip_inventory_item(payload: ShopEquipRequest) -> UserProfileSchema:
         return repo.equip_item(user_id=payload.user_id, item_code=payload.item_code)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/arena/bosses", response_model=List[ArenaBossSchema])
+def get_arena_bosses(user_id: str = Query(default="demo-user-001")) -> List[ArenaBossSchema]:
+    """
+    Список этажей и боссов «Нейро-Арены / Башни Боссов» с рекомендуемым уровнем героя,
+    боевой мощью и наградой (золото, XP, эксклюзивные трофеи).
+    """
+    return repo.list_arena_bosses(user_id=user_id)
+
+
+@app.post("/api/v1/arena/claim-victory", response_model=ArenaClaimVictoryResponse)
+def claim_arena_victory(payload: ArenaClaimVictoryRequest) -> ArenaClaimVictoryResponse:
+    """
+    Фиксация победы над боссом этажа в мини-игре (Bullet-Hell / Reflex Parry)
+    с выдачей награды (XP, золота и трофея) в профиль героя.
+    """
+    try:
+        return repo.claim_boss_victory(
+            user_id=payload.user_id,
+            boss_code=payload.boss_code,
+            remaining_hp_percent=payload.remaining_hp_percent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -176,6 +176,51 @@ class InventoryItemSchema(BaseModel):
     is_equipped: bool = False
 
 
+MinigameModeType = Literal["bullet_hell", "reflex_parry"]
+
+
+class CombatStatsSchema(BaseModel):
+    """
+    Боевые характеристики аватара, рассчитанные из уровней 4 сфер и экипировки:
+    - 💪 Тело -> max_hp, attack_power
+    - 🧠 Мозг -> chrono_slow_percent, parry_window_ms
+    - ⚡ Энергия -> dash_cooldown_sec, stamina_regen
+    - 🎨 Душа -> crit_chance (x2.5), pet_assist_shield
+    """
+
+    max_hp: int
+    attack_power: int
+    chrono_slow_percent: int
+    parry_window_ms: int
+    dash_cooldown_sec: float
+    stamina_regen: float
+    crit_chance: float
+    crit_multiplier: float = 2.5
+    pet_assist_shield: int
+    combat_power_score: int
+
+
+class ArenaBossSchema(BaseModel):
+    id: str
+    code: str
+    floor: int
+    name: str
+    title: str
+    description: str
+    minigame_mode: MinigameModeType
+    recommended_hero_level: int
+    boss_hp: int
+    boss_dps: int
+    bullet_density: float = 1.0
+    boss_power_score: int
+    reward_xp: int
+    reward_gold: int
+    trophy_code: str
+    trophy_name: str
+    icon: str
+    is_defeated: bool = False
+
+
 class UserProfileSchema(BaseModel):
     id: str
     username: str
@@ -187,6 +232,8 @@ class UserProfileSchema(BaseModel):
     streak_days: int
     streak_freeze_active: bool
     equipped_state: EquippedState
+    combat_stats: CombatStatsSchema
+    defeated_bosses: List[str] = Field(default_factory=list)
     spheres: List[SphereSchema]
     active_quests: List[QuestSchema]
     inventory: List[InventoryItemSchema]
@@ -201,6 +248,22 @@ class QuestCompleteResponse(BaseModel):
     new_hero_level: int
     sphere_leveled_up: bool
     new_sphere_level: int
+    profile: UserProfileSchema
+
+
+class ArenaClaimVictoryRequest(BaseModel):
+    user_id: str = "demo-user-001"
+    boss_code: str
+    remaining_hp_percent: float = Field(default=100.0, ge=0.0, le=100.0)
+
+
+class ArenaClaimVictoryResponse(BaseModel):
+    boss: ArenaBossSchema
+    xp_earned: int
+    gold_earned: int
+    trophy_awarded: str
+    hero_leveled_up: bool
+    new_hero_level: int
     profile: UserProfileSchema
 
 

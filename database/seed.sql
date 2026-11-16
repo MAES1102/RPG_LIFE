@@ -86,3 +86,87 @@ ON CONFLICT (code) DO UPDATE SET
     rive_asset_key = EXCLUDED.rive_asset_key,
     icon = EXCLUDED.icon,
     metadata = EXCLUDED.metadata;
+
+-- ----------------------------------------------------------------------------
+-- Стартовые этажи Башни Боссов / Нейро-Арены
+-- ----------------------------------------------------------------------------
+INSERT INTO public.arena_bosses (
+    code, floor, name, title, description, minigame_mode,
+    recommended_hero_level, boss_hp, boss_dps, bullet_density,
+    reward_xp, reward_gold, trophy_code, trophy_name, icon
+)
+VALUES
+    (
+        'boss_floor_1_warden',
+        1,
+        'Цербер Прокрастинации v1.0',
+        'Страж Первого Контура',
+        'Атакует веерными импульсами рассеянного внимания. Прокачай Мозг для замедления времени и Тело для пробития щита.',
+        'bullet_hell',
+        1,
+        420,
+        24,
+        1.0,
+        250,
+        65,
+        'trophy_warden_core',
+        'Ядро Цербера (Этаж 1)',
+        '👾'
+    ),
+    (
+        'boss_floor_2_ronin',
+        2,
+        'Хроно-Ронин «Акаги»',
+        'Мастер Сверхзвукового Парирования',
+        'Молниеносная дуэль на реакцию. Без прокачанного окна парирования (Мозг) и мощного удара (Тело) пробить его защиту почти невозможно.',
+        'reflex_parry',
+        2,
+        720,
+        36,
+        1.3,
+        400,
+        110,
+        'trophy_ronin_katana',
+        'Клинок Акаги (Этаж 2)',
+        '👹'
+    ),
+    (
+        'boss_floor_3_leviathan',
+        3,
+        'Нейро-Левиафан «Омега-Сеть»',
+        'Архитектор Плотного Фаервола',
+        'Генерирует спиральные штормы лазеров. Требуется высокий уровень Энергии для частых рывков и Души для щита компаньона.',
+        'bullet_hell',
+        4,
+        1250,
+        52,
+        1.7,
+        650,
+        180,
+        'trophy_leviathan_matrix',
+        'Матрица Левиафана (Этаж 3)',
+        '🐉'
+    ),
+    (
+        'boss_floor_4_architect',
+        4,
+        'Абсолютный Архитектор Энтропии',
+        'Финальный Босс Кибер-Башни',
+        'Экстремальная проверка всех 4 сфер жизни: максимальная скорость зон парирования и сокрушительные контратаки.',
+        'reflex_parry',
+        6,
+        2100,
+        75,
+        2.2,
+        1000,
+        300,
+        'trophy_entropy_crown',
+        'Корона Архитектора (Этаж 4)',
+        '👑'
+    )
+ON CONFLICT (code) DO UPDATE SET
+    name = EXCLUDED.name,
+    boss_hp = EXCLUDED.boss_hp,
+    boss_dps = EXCLUDED.boss_dps,
+    reward_xp = EXCLUDED.reward_xp,
+    reward_gold = EXCLUDED.reward_gold;

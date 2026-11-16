@@ -138,6 +138,37 @@ CREATE TABLE IF NOT EXISTS public.user_inventory (
 );
 
 -- ----------------------------------------------------------------------------
+-- 7. arena_bosses и user_boss_victories — Башня Боссов / Нейро-Арена
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.arena_bosses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code TEXT NOT NULL UNIQUE,
+    floor INTEGER NOT NULL UNIQUE CHECK (floor >= 1),
+    name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    minigame_mode TEXT NOT NULL DEFAULT 'bullet_hell' CHECK (minigame_mode IN ('bullet_hell', 'reflex_parry')),
+    recommended_hero_level INTEGER NOT NULL DEFAULT 1,
+    boss_hp INTEGER NOT NULL CHECK (boss_hp > 0),
+    boss_dps INTEGER NOT NULL CHECK (boss_dps > 0),
+    bullet_density NUMERIC(4, 2) NOT NULL DEFAULT 1.0,
+    reward_xp INTEGER NOT NULL CHECK (reward_xp >= 0),
+    reward_gold INTEGER NOT NULL CHECK (reward_gold >= 0),
+    trophy_code TEXT NOT NULL,
+    trophy_name TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '👾'
+);
+
+CREATE TABLE IF NOT EXISTS public.user_boss_victories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    boss_code TEXT NOT NULL REFERENCES public.arena_bosses(code) ON DELETE CASCADE,
+    minigame_mode TEXT NOT NULL,
+    remaining_hp_percent NUMERIC(5, 2) NOT NULL DEFAULT 100.0,
+    defeated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ----------------------------------------------------------------------------
 -- Индексы для быстрых выборок
 -- ----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_spheres_user_id ON public.spheres(user_id);

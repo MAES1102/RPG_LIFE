@@ -6,6 +6,9 @@ from typing import Dict, List, Optional
 
 from app.models.schemas import (
     ActivityLogSchema,
+    ArenaBossSchema,
+    ArenaClaimVictoryResponse,
+    CombatStatsSchema,
     EquippedState,
     InventoryItemSchema,
     PresetType,
@@ -20,6 +23,7 @@ from app.models.schemas import (
 from app.services.progression import (
     apply_xp_and_level_up,
     compute_action_reward,
+    compute_combat_stats,
     compute_xp_next,
 )
 
@@ -218,9 +222,88 @@ INITIAL_SHOP_CATALOG: List[ShopItemSchema] = [
     ),
 ]
 
+INITIAL_ARENA_BOSSES: List[ArenaBossSchema] = [
+    ArenaBossSchema(
+        id="boss-floor-1",
+        code="boss_floor_1_warden",
+        floor=1,
+        name="Цербер Прокрастинации v1.0",
+        title="Страж Первого Контура",
+        description="Атакует веерными импульсами рассеянного внимания. Прокачай Мозг для замедления времени и Тело для пробития щита.",
+        minigame_mode="bullet_hell",
+        recommended_hero_level=1,
+        boss_hp=420,
+        boss_dps=24,
+        bullet_density=1.0,
+        boss_power_score=260,
+        reward_xp=250,
+        reward_gold=65,
+        trophy_code="trophy_warden_core",
+        trophy_name="Ядро Цербера (Этаж 1)",
+        icon="👾",
+    ),
+    ArenaBossSchema(
+        id="boss-floor-2",
+        code="boss_floor_2_ronin",
+        floor=2,
+        name="Хроно-Ронин «Акаги»",
+        title="Мастер Сверхзвукового Парирования",
+        description="Молниеносная дуэль на реакцию. Без прокачанного окна парирования (Мозг) и мощного удара (Тело) пробить его защиту почти невозможно.",
+        minigame_mode="reflex_parry",
+        recommended_hero_level=2,
+        boss_hp=720,
+        boss_dps=36,
+        bullet_density=1.3,
+        boss_power_score=390,
+        reward_xp=400,
+        reward_gold=110,
+        trophy_code="trophy_ronin_katana",
+        trophy_name="Клинок Акаги (Этаж 2)",
+        icon="👹",
+    ),
+    ArenaBossSchema(
+        id="boss-floor-3",
+        code="boss_floor_3_leviathan",
+        floor=3,
+        name="Нейро-Левиафан «Омега-Сеть»",
+        title="Архитектор Плотного Фаервола",
+        description="Генерирует спиральные штормы лазеров. Требуется высокий уровень Энергии для частых рывков и Души для щита компаньона.",
+        minigame_mode="bullet_hell",
+        recommended_hero_level=4,
+        boss_hp=1250,
+        boss_dps=52,
+        bullet_density=1.7,
+        boss_power_score=560,
+        reward_xp=650,
+        reward_gold=180,
+        trophy_code="trophy_leviathan_matrix",
+        trophy_name="Матрица Левиафана (Этаж 3)",
+        icon="🐉",
+    ),
+    ArenaBossSchema(
+        id="boss-floor-4",
+        code="boss_floor_4_architect",
+        floor=4,
+        name="Абсолютный Архитектор Энтропии",
+        title="Финальный Босс Кибер-Башни",
+        description="Экстремальная проверка всех 4 сфер жизни: максимальная скорость зон парирования и сокрушительные контратаки.",
+        minigame_mode="reflex_parry",
+        recommended_hero_level=6,
+        boss_hp=2100,
+        boss_dps=75,
+        bullet_density=2.2,
+        boss_power_score=780,
+        reward_xp=1000,
+        reward_gold=300,
+        trophy_code="trophy_entropy_crown",
+        trophy_name="Корона Архитектора (Этаж 4)",
+        icon="👑",
+    ),
+]
+
 
 class RPGRepository:
-    """Хранилище 6 ключевых сущностей RPG_LIFE с поддержкой пресетов и игровой экономики."""
+    """Хранилище 6 ключевых сущностей RPG_LIFE с поддержкой пресетов, арены боссов и игровой экономики."""
 
     def __init__(self) -> None:
         self.users: Dict[str, dict] = {}
@@ -231,6 +314,10 @@ class RPGRepository:
             item.code: item for item in INITIAL_SHOP_CATALOG
         }
         self.user_inventory: Dict[str, List[InventoryItemSchema]] = {}
+        self.arena_bosses: Dict[str, ArenaBossSchema] = {
+            b.code: b for b in INITIAL_ARENA_BOSSES
+        }
+        self.defeated_bosses: Dict[str, List[str]] = {}
 
         # Инициализируем демо-героя по умолчанию
         self.initialize_user_with_preset(
@@ -339,6 +426,17 @@ class RPGRepository:
             if q.is_active
         ]
 
+        sphere_levels = {s.code: s.level for s in spheres}
+        eq: EquippedState = u["equipped_state"]
+        cs = compute_combat_stats(
+            body_level=sphere_levels.get("body", 1),
+            brain_level=sphere_levels.get("brain", 1),
+            energy_level=sphere_levels.get("energy", 1),
+            soul_level=sphere_levels.get("soul", 1),
+            equipped_skin=eq.skin,
+            equipped_pet=eq.pet,
+        )
+
         return UserProfileSchema(
             id=u["id"],
             username=u["username"],
@@ -349,7 +447,20 @@ class RPGRepository:
             gold=u["gold"],
             streak_days=u["streak_days"],
             streak_freeze_active=u["streak_freeze_active"],
-            equipped_state=u["equipped_state"],
+            equipped_state=eq,
+            combat_stats=CombatStatsSchema(
+                max_hp=cs.max_hp,
+                attack_power=cs.attack_power,
+                chrono_slow_percent=cs.chrono_slow_percent,
+                parry_window_ms=cs.parry_window_ms,
+                dash_cooldown_sec=cs.dash_cooldown_sec,
+                stamina_regen=cs.stamina_regen,
+                crit_chance=cs.crit_chance,
+                crit_multiplier=cs.crit_multiplier,
+                pet_assist_shield=cs.pet_assist_shield,
+                combat_power_score=cs.combat_power_score,
+            ),
+            defeated_bosses=list(self.defeated_bosses.get(user_id, [])),
             spheres=spheres,
             active_quests=active_quests,
             inventory=self.user_inventory.get(user_id, []),
@@ -549,6 +660,78 @@ class RPGRepository:
             eq.pet = target.item.rive_asset_key
 
         return self.get_profile(user_id)
+
+    def list_arena_bosses(self, user_id: str = "demo-user-001") -> List[ArenaBossSchema]:
+        """Возвращает этажи Башни Боссов с отметкой о победе конкретного игрока."""
+        defeated = set(self.defeated_bosses.get(user_id, []))
+        result: List[ArenaBossSchema] = []
+        for boss in sorted(self.arena_bosses.values(), key=lambda b: b.floor):
+            boss_copy = boss.model_copy(update={"is_defeated": boss.code in defeated})
+            result.append(boss_copy)
+        return result
+
+    def claim_boss_victory(
+        self,
+        user_id: str,
+        boss_code: str,
+        remaining_hp_percent: float = 100.0,
+    ) -> ArenaClaimVictoryResponse:
+        """
+        Фиксирует победу над боссом этажа в мини-игре, начисляет XP, золото и трофей в профиль.
+        """
+        self.get_profile(user_id)
+        boss = self.arena_bosses.get(boss_code)
+        if boss is None:
+            raise ValueError(f"Босс {boss_code} не найден в Башне Боссов")
+
+        u = self.users[user_id]
+        defeated_list = self.defeated_bosses.setdefault(user_id, [])
+        if boss_code not in defeated_list:
+            defeated_list.append(boss_code)
+
+        # Бонус за чистое прохождение (если осталось >50% ХП -> +15% к награде)
+        perf_bonus = 1.15 if remaining_hp_percent >= 50.0 else 1.0
+        xp_earned = int(round(boss.reward_xp * perf_bonus))
+        gold_earned = int(round(boss.reward_gold * perf_bonus))
+
+        new_lvl, new_xp, leveled_up = apply_xp_and_level_up(
+            current_level=u["level"],
+            current_xp=u["current_xp"],
+            added_xp=xp_earned,
+        )
+        u["level"] = new_lvl
+        u["current_xp"] = new_xp
+        u["gold"] += gold_earned
+
+        log_entry = ActivityLogSchema(
+            id=f"log-boss-{uuid.uuid4().hex[:8]}",
+            user_id=user_id,
+            quest_id=None,
+            sphere_id=None,
+            quest_title=f"🏆 Победа над боссом: {boss.name}",
+            actual_value=remaining_hp_percent,
+            target_value=100.0,
+            difficulty="hardcore",
+            streak_multiplier=1.0,
+            overachieve_multiplier=perf_bonus,
+            xp_earned=xp_earned,
+            gold_earned=gold_earned,
+            proof_url=None,
+            completed_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self.activity_logs.setdefault(user_id, []).insert(0, log_entry)
+
+        updated_profile = self.get_profile(user_id)
+        boss_out = boss.model_copy(update={"is_defeated": True})
+        return ArenaClaimVictoryResponse(
+            boss=boss_out,
+            xp_earned=xp_earned,
+            gold_earned=gold_earned,
+            trophy_awarded=boss.trophy_name,
+            hero_leveled_up=leveled_up,
+            new_hero_level=new_lvl,
+            profile=updated_profile,
+        )
 
 
 repo = RPGRepository()
